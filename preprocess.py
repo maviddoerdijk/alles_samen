@@ -3,6 +3,12 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from datetime import datetime
 
+# load frm csv
+df1 = pd.read_csv("train.csv")
+df2 = pd.read_csv("test_example.csv")
+print(len(df1))
+print(len(df2))
+
 # Sample data
 data = {
     'date': ['2010-01-01', '2010-01-02', '2010-01-03', '2010-01-04', '2010-01-05'],

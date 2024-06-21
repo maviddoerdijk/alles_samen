@@ -38,6 +38,8 @@ from tqdm import tqdm
 
 from model import RecurrentNN, RecurrentNNLSTM, RecurrentNNSeq2Seq, RecurrentNNBidirectionalLSTM
 
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+
 random_seed = 42
 np.random.seed(random_seed)
 torch.manual_seed(random_seed)
@@ -55,6 +57,30 @@ def add_time_features(df):
     df['day_of_year'] = pd.to_datetime(df['Date']).dt.dayofyear
     return df
 
+def preprocess_data(df):
+    # Convert date to datetime
+    df['Date'] = pd.to_datetime(df['Date'])
+
+    # Calculate day_of_year
+    df['day_of_year'] = df['Date'].dt.dayofyear
+
+    # Scale number_sold
+    scaler = StandardScaler()
+    df['number_sold_scaled'] = scaler.fit_transform(df[['number_sold']])
+
+    # One-hot encode product and store
+    encoder = OneHotEncoder(sparse=False)
+    encoded = encoder.fit_transform(df[['product', 'store']])
+    encoded_df = pd.DataFrame(encoded, columns=encoder.get_feature_names_out(['product', 'store']))
+
+    # Combine all features into a single DataFrame
+    df = pd.concat([df, encoded_df], axis=1)
+
+    # Drop unnecessary columns
+    df = df.drop(columns=['Date', 'number_sold', 'product', 'store'])
+
+    return df
+
 def train(CurrentModel, input_features=['number_sold']):
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -65,17 +91,20 @@ def train(CurrentModel, input_features=['number_sold']):
     #     # load to df
     df = pd.read_csv(file_path, sep=',')
     
-    df = add_time_features(df)
+    df = preprocess_data(df)  # Preprocess the data
 
-    data = df[input_features].values
+    data = df[input_features].values.astype("float32")  # Select input features
     # plt.plot(data)
     # plt.xlabel('time')
     # plt.ylabel('number_sold')
     # plt.title('Number of sold products over time')
     # plt.savefig('number_sold.png')
+    
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    data = scaler.fit_transform(data)
 
     # Normalize data
-    data = data.reshape(-1, 1).astype("float32")
+    data = data.reshape(-1, 1)
     scaler = MinMaxScaler(feature_range=(0, 1))
     data = scaler.fit_transform(data)
 
@@ -96,7 +125,7 @@ def train(CurrentModel, input_features=['number_sold']):
     trainY, testY = trainY[:split_idx], trainY[split_idx:]
 
     # Train and validate the imported RNN model
-    n_epochs = 100
+    n_epochs = 10  # Number of epochs
     mod_epochs = 5  # Model saving epochs
 
     learning_rate = 0.005
@@ -138,7 +167,7 @@ def train(CurrentModel, input_features=['number_sold']):
     return model
 
 if __name__ == "__main__":
-    for ModelType in [RecurrentNN, RecurrentNNLSTM, RecurrentNNBidirectionalLSTM]:
-        for input_features in [['number_sold'], ['number_sold', 'day_of_year']]:
+    for ModelType in [RecurrentNNLSTM]:
+        for input_features in [['number_sold_scaled', 'day_of_year', 'store_0', 'store_1', 'store_2', 'store_3', 'store_4', 'store_5', 'store_6', 'product_0', 'product_1', 'product_2', 'product_3', 'product_4', 'product_5', 'product_6', 'product_7', 'product_8', 'product_9']]: 
             model = train(ModelType, input_features=input_features)
             torch.save(model.state_dict(), f'{model.__class__.__name__}_{len(input_features)}.pth')
