@@ -6,98 +6,96 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_percentage_error
 import matplotlib.pyplot as plt
 
-history_steps = []
-future_steps = []
-predicted_steps = []
 
-df = pd.read_csv("test_example.csv")
-df = df.iloc[:, 1:]
-model = RecurrentNNLSTM()
-# model.load_state_dict(torch.load("NNRecurrentModel.pth"))  # load your model here
-model_name = "RecurrentNNLSTM_2.pth"
-model.load_state_dict(torch.load(model_name))  # load your model here
-model.eval()
-window_size = 10  # please fill in your own choice: this is the length of history you have to decide
 
-# split the data set by the combination of `store` and `product``
-gb = df.groupby(["store", "product"])
-groups = {x: gb.get_group(x) for x in gb.groups}
-scores = {}
+all_tuples = [('RecurrentNN_2.pth', RecurrentNN), ('RecurrentNN_normal.pth', RecurrentNN), ('RecurrentNNLSTM_normal.pth', RecurrentNNLSTM), ('RecurrentNNLSTM_2.pth', RecurrentNNLSTM), ('RecurrentNNLSTM_productandstore.pth', RecurrentNNLSTM)]
 
-for key, data in groups.items():
-    # By default, we only take the column `number_sold`.
-    # Please modify this line if your model takes other columns as input
-    X = data.drop(["Date", "store", "product"], axis=1).values  # convert to numpy array
+
+for model_name, modeltype in all_tuples:
+    print(f"Model: {model_name.upper()}")
+    print(f"Model Type: {modeltype}")
     
-    normal_input = X.reshape(-1, 1).astype("float32")
-    scaler = MinMaxScaler(feature_range=(0, 1))
+    history_steps = []
+    future_steps = []
+    predicted_steps = []
+
+    df = pd.read_csv("test_example.csv")
+    df = df.iloc[:, 1:]
     
-    # Load the model here
-    scaler.fit(normal_input)
-    
-    N = X.shape[0]  # total number of testing time steps
+    model = modeltype()
+    model.load_state_dict(torch.load(model_name))  # load your model here
+    model.eval()
+    window_size = 10  # please fill in your own choice: this is the length of history you have to decide
 
-    mape_score = []
-    start = window_size
-    while start + 5 <= N:
-        inputs = X[(start - window_size) : start, :]
-        targets = X[start : (start + 5), :]
+    # split the data set by the combination of `store` and `product``
+    gb = df.groupby(["store", "product"])
+    groups = {x: gb.get_group(x) for x in gb.groups}
+    scores = {}
+
+    for key, data in groups.items():
+        # By default, we only take the column `number_sold`.
+        # Please modify this line if your model takes other columns as input
+        X = data.drop(["Date", "store", "product"], axis=1).values  # convert to numpy array
         
-        history_steps.append(inputs)
-
-        # you might need to modify `inputs` before feeding it to your model, e.g., convert it to PyTorch Tensors
-        # you might have a different name of the prediction function. Please modify accordingly
         
-        #print(f"Inputs for {key}: {inputs.flatten()}")
+        normal_input = X.reshape(-1, 1).astype("float32")
+        scaler = MinMaxScaler(feature_range=(0, 1))
         
-        #normalize inputs
-
-        normal_input = scaler.transform(inputs)
+        # Load the model here
+        scaler.fit(normal_input)
         
-        inputs = torch.tensor(normal_input, dtype=torch.float).unsqueeze(0)
-        
-        #print(f"Normal Inputs for {key}: {inputs.flatten()}")
-        
-        normalized_predictions = model(inputs).detach().numpy()[0]
-        predictions = scaler.inverse_transform(normalized_predictions.reshape(-1,1))
-        
-        #print(f"Predictions for {key}: {predictions.flatten()}")
+        N = X.shape[0]  # total number of testing time steps
 
-        #print(f"Targets for {key}: {targets.flatten()}")
+        mape_score = []
+        start = window_size
+        while start + 5 <= N:
+            inputs = X[(start - window_size) : start, :]
+            targets = X[start : (start + 5), :]
+            
+            history_steps.append(inputs)
 
-        #print(f"MAPE for {key}: {mean_absolute_percentage_error(targets, predictions)}")
-        start += 5
-        # calculate the performance metric
-        mape_score.append(mean_absolute_percentage_error(targets, predictions))
-        
-        future_steps.append(targets)
-        predicted_steps.append(predictions)
-    print(f"MAPE for {key}: {np.mean(mape_score)}")
-    scores[key] = mape_score
+            # you might need to modify `inputs` before feeding it to your model, e.g., convert it to PyTorch Tensors
+            # you might have a different name of the prediction function. Please modify accordingly
+            
+            #print(f"Inputs for {key}: {inputs.flatten()}")
+            
+            #normalize inputs
 
-# save the performance metrics to file
-avg_history = np.mean(history_steps, axis=0)
-avg_future = np.mean(future_steps, axis=0)
-avg_predicted = np.mean(predicted_steps, axis=0)
+            normal_input = scaler.transform(inputs)
+            
+            inputs = torch.tensor(normal_input, dtype=torch.float).unsqueeze(0)
+            
+            #print(f"Normal Inputs for {key}: {inputs.flatten()}")
+            
+            normalized_predictions = model(inputs).detach().numpy()[0]
+            predictions = scaler.inverse_transform(normalized_predictions.reshape(-1,1))
+            
+            #print(f"Predictions for {key}: {predictions.flatten()}")
 
-plt.plot([i for i in range(10)],avg_history, label="History")
-plt.plot([i for i in range(9, 15)],np.append([avg_history[-1]],avg_future), label="Future")
-plt.plot([i for i in range(9, 15)],np.append([avg_history[-1]],avg_predicted), label="Predicted")
-plt.legend()
-plt.savefig(model_name + ".png")
-plt.show()
+            #print(f"Targets for {key}: {targets.flatten()}")
+
+            #print(f"MAPE for {key}: {mean_absolute_percentage_error(targets, predictions)}")
+            start += 5
+            # calculate the performance metric
+            mape_score.append(mean_absolute_percentage_error(targets, predictions))
+            
+            future_steps.append(targets)
+            predicted_steps.append(predictions)
+        print(f"MAPE for {key}: {np.mean(mape_score)}")
+        scores[key] = mape_score
+
+    # save the performance metrics to file
+    avg_history = np.mean(history_steps, axis=0)
+    avg_future = np.mean(future_steps, axis=0)
+    avg_predicted = np.mean(predicted_steps, axis=0)
+
+    plt.plot([i for i in range(10)],avg_history, label="History")
+    plt.plot([i for i in range(9, 15)],np.append([avg_history[-1]],avg_future), label="Future")
+    plt.plot([i for i in range(9, 15)],np.append([avg_history[-1]],avg_predicted), label="Predicted")
+    plt.legend()
+    plt.savefig(model_name + ".png")
+    plt.show()
 
 
 
-np.savez("score.npz", scores=scores)
-
-
-# TODO: implement MAPELoss
-# class MAPELoss(torch.nn.Module):
-#     def _init_(self):
-#         super(MAPELoss, self)._init_()
-
-#     def forward(self, pred, target):
-#         epsilon = 1e-10  # To prevent division by zero
-#         ape = torch.abs((target - pred) / (target + epsilon))
-#         return torch.mean(ape) * 100
+    np.savez("score.npz", scores=scores)

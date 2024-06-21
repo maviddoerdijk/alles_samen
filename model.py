@@ -1,50 +1,10 @@
-# possible models from slides
-# hopfield
-# lstm
-# seq2seq
-
-
-
-# class RecurrentNN(torch.nn.Module):
-#     def __init__(self):
-#         super().__init__()
-#         #### SOLUTION
-#         self.rnn_unit = torch.nn.LSTM(input_size=1, hidden_size=10, num_layers=1)
-#         self.output_unit = torch.nn.Linear(10, 1)
-
-#     def forward(self, x: torch.Tensor):
-#         output,_ = self.rnn_unit(x)
-#         output = self.output_unit(output)
-#         return output
-
-
 import torch
 import torch.nn as nn
 
-class RecurrentNN(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.rnn_unit = torch.nn.RNN(input_size=1, hidden_size=10, num_layers=1)
-        self.output_unit = torch.nn.Linear(10, 5)
-
-    def forward(self, x: torch.Tensor):
-        output,_ = self.rnn_unit(x)
-        output = self.output_unit(output[:, -1, :])  # Use the output of the last time step
-        return output
-
-
-class RecurrentNNBidirectionalLSTM(nn.Module):
-    def __init__(self):
-        super(RecurrentNNBidirectionalLSTM, self).__init__()
-        self.rnn_unit = nn.LSTM(input_size=1, hidden_size=10, num_layers=1, bidirectional=True)
-        self.output_unit = nn.Linear(20, 5)  # hidden_size * 2 because of bidirectional
-
-    def forward(self, x):
-        output, _ = self.rnn_unit(x)
-        output = self.output_unit(output[:, -1, :])  # Use the output of the last time step
-        return output
-
 class RecurrentNNLSTM(nn.Module):
+    """
+    Eventually found to be the winner!
+    """
     def __init__(self, input_size=1, hidden_size=50, output_size=5, num_layers=2):
         super(RecurrentNNLSTM, self).__init__()
         self.hidden_size = hidden_size
@@ -59,6 +19,27 @@ class RecurrentNNLSTM(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
+class RecurrentNN(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.rnn_unit = torch.nn.RNN(input_size=1, hidden_size=10, num_layers=1)
+        self.output_unit = torch.nn.Linear(10, 5)
+
+    def forward(self, x: torch.Tensor):
+        output,_ = self.rnn_unit(x)
+        output = self.output_unit(output[:, -1, :])  # Use the output of the last time step
+        return output
+
+class RecurrentNNBidirectionalLSTM(nn.Module):
+    def __init__(self):
+        super(RecurrentNNBidirectionalLSTM, self).__init__()
+        self.rnn_unit = nn.LSTM(input_size=1, hidden_size=10, num_layers=1, bidirectional=True)
+        self.output_unit = nn.Linear(20, 5)  # hidden_size * 2 because of bidirectional
+
+    def forward(self, x):
+        output, _ = self.rnn_unit(x)
+        output = self.output_unit(output[:, -1, :])  # Use the output of the last time step
+        return output
 
 class RecurrentNNSeq2Seq(nn.Module):
     def __init__(self, input_size=1, hidden_size=50, output_size=1, num_layers=2):
