@@ -140,7 +140,5 @@ def train(CurrentModel, input_features=['number_sold']):
 if __name__ == "__main__":
     for ModelType in [RecurrentNN, RecurrentNNLSTM, RecurrentNNBidirectionalLSTM]:
         for input_features in [['number_sold'], ['number_sold', 'day_of_year']]:
-            print(f'Training {ModelType.__name__} with input features {input_features}')
-            model = train(ModelType)
-            print(f'{model.__class__.__name__}.pth')
-            torch.save(model.state_dict(), f'{model.__class__.__name__}.pth')
+            model = train(ModelType, input_features=input_features)
+            torch.save(model.state_dict(), f'{model.__class__.__name__}_{len(input_features)}.pth')
