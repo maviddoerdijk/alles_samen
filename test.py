@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from model import RecurrentNN
+from model import RecurrentNN, RecurrentNNLSTM
 import torch
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_percentage_error
@@ -12,8 +12,10 @@ predicted_steps = []
 
 df = pd.read_csv("test_example.csv")
 df = df.iloc[:, 1:]
-model = RecurrentNN()
-model.load_state_dict(torch.load("NNRecurrentModel.pth"))  # load your model here
+model = RecurrentNNLSTM()
+# model.load_state_dict(torch.load("NNRecurrentModel.pth"))  # load your model here
+model_name = "RecurrentNNLSTM_2.pth"
+model.load_state_dict(torch.load(model_name))  # load your model here
 model.eval()
 window_size = 10  # please fill in your own choice: this is the length of history you have to decide
 
@@ -82,6 +84,7 @@ plt.plot([i for i in range(10)],avg_history, label="History")
 plt.plot([i for i in range(9, 15)],np.append([avg_history[-1]],avg_future), label="Future")
 plt.plot([i for i in range(9, 15)],np.append([avg_history[-1]],avg_predicted), label="Predicted")
 plt.legend()
+plt.savefig(model_name + ".png")
 plt.show()
 
 

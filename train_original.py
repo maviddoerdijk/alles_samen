@@ -36,7 +36,7 @@ import os
 
 from tqdm import tqdm
 
-from model import RecurrentNN, RecurrentNNLSTM, RecurrentNNSeq2Seq, RecurrentNNBidirectionalLSTM
+from model import RecurrentNN, RecurrentNNLSTM, RecurrentNNSeq2Seq
 
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
@@ -52,12 +52,11 @@ def create_sequences(data, history_steps=20, future_steps=5):
         y.append(data[i + history_steps:i + history_steps + future_steps])
     return np.array(x), np.array(y)
 
-# Add time-based features to the dataframe
-def add_time_features(df):
-    df['day_of_year'] = pd.to_datetime(df['Date']).dt.dayofyear
-    return df
 
 def preprocess_data(df):
+    # take mean of all entries that have same date, and drop 'product' and 'store' columns
+    # df= df.groupby('Date').mean().reset_index()
+
     # Convert date to datetime
     df['Date'] = pd.to_datetime(df['Date'])
 
@@ -68,7 +67,7 @@ def preprocess_data(df):
     scaler = StandardScaler()
     df['number_sold_scaled'] = scaler.fit_transform(df[['number_sold']])
 
-    # One-hot encode product and store
+    # Note that we didn't have the computational capacities to implement this, but we are pretty sure this would improve model performance
     encoder = OneHotEncoder(sparse=False)
     encoded = encoder.fit_transform(df[['product', 'store']])
     encoded_df = pd.DataFrame(encoded, columns=encoder.get_feature_names_out(['product', 'store']))
@@ -76,22 +75,20 @@ def preprocess_data(df):
     # Combine all features into a single DataFrame
     df = pd.concat([df, encoded_df], axis=1)
 
-    # Drop unnecessary columns
-    df = df.drop(columns=['Date', 'number_sold', 'product', 'store'])
-
     return df
 
-def train(CurrentModel, input_features=['number_sold']):
+def train(CurrentModel, input_features=['number_sold_scaled']):
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, 'train.csv')
 
-    # with open(file_path, 'r') as f:
-    #     # Date,store,product,number_sold
-    #     # load to df
-    df = pd.read_csv(file_path, sep=',')
-    
-    df = preprocess_data(df)  # Preprocess the data
+    with open(file_path, 'r') as f:
+        # Date,store,product,number_sold
+        # load to df
+        df = pd.read_csv(f, sep=',')
+
+    print(df.head())
+    df = preprocess_data(df)
 
     data = df[input_features].values.astype("float32")  # Select input features
     # plt.plot(data)
@@ -99,12 +96,9 @@ def train(CurrentModel, input_features=['number_sold']):
     # plt.ylabel('number_sold')
     # plt.title('Number of sold products over time')
     # plt.savefig('number_sold.png')
-    
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    data = scaler.fit_transform(data)
 
     # Normalize data
-    data = data.reshape(-1, 1)
+    data = data.reshape(-1, 1).astype("float32")
     scaler = MinMaxScaler(feature_range=(0, 1))
     data = scaler.fit_transform(data)
 
@@ -116,31 +110,29 @@ def train(CurrentModel, input_features=['number_sold']):
     xtrain, ytrain = create_sequences(data, history_steps=time_step, future_steps=future_step)
 
     # Convert to tensors
-    trainX = torch.tensor(xtrain, dtype=torch.float32)
-    trainY = torch.tensor(ytrain, dtype=torch.float32)
+    X = torch.tensor(xtrain, dtype=torch.float32)
+    Y = torch.tensor(ytrain, dtype=torch.float32)
 
-    # Split the data into training and testing sets
-    split_idx = int(len(trainX) * 0.67)
-    trainX, testX = trainX[:split_idx], trainX[split_idx:]
-    trainY, testY = trainY[:split_idx], trainY[split_idx:]
+    # Split the data into training and validateing sets
+    split_idx = int(len(X) * 0.67)
+    trainX, valX = X[:split_idx], X[split_idx:]
+    trainY, valY = Y[:split_idx], Y[split_idx:]
 
     # Train and validate the imported RNN model
-    n_epochs = 10  # Number of epochs
-    mod_epochs = 5  # Model saving epochs
+    n_epochs = 6
+    mod_epochs = 1  # Model saving epochs
 
     learning_rate = 0.005
 
-    model = CurrentModel()#.to(device)
-    # input_size = 1  # Single feature
-    # hidden_size = 50
-    # output_size = future_step  # Predicting multiple future steps
-    # num_layers = 2
-    # model = RecurrentNNLSTM(input_size=input_size, hidden_size=hidden_size, output_size=output_size, num_layers=num_layers)
+    model = CurrentModel()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_fn = torch.nn.MSELoss()
-    # model = RecurrentNNLSTM().to(device)
 
     loader = data_util.DataLoader(data_util.TensorDataset(trainX, trainY), shuffle=True, batch_size=8)
+
+    patience = 3
+    best_val_rmse = np.inf
+    count_epochs_no_improve = 0
 
     for epoch in range(n_epochs + 1):
         model.train()  # Set the model to training mode
@@ -160,14 +152,23 @@ def train(CurrentModel, input_features=['number_sold']):
             y_pred = model(trainX)
             trainY = trainY.squeeze(-1) if trainY.dim() == 3 else trainY  # Ensure trainY is 2D
             train_rmse = torch.sqrt(loss_fn(y_pred, trainY))  # Compute the loss by this forward pass, rmse means root mean squared error
-            y_pred = model(testX)
-            testY = testY.squeeze(-1) if testY.dim() == 3 else testY  # Ensure testY is 2D
-            test_rmse = torch.sqrt(loss_fn(y_pred, testY))
-        print("Epoch %d: train RMSE %.4f, test RMSE %.4f" % (epoch, train_rmse, test_rmse))
+            y_pred = model(valX)
+            valY = valY.squeeze(-1) if valY.dim() == 3 else valY  # Ensure testY is 2D
+            val_rmse = torch.sqrt(loss_fn(y_pred, valY))
+            
+            if val_rmse < best_val_rmse:
+                best_val_rmse = val_rmse
+                count_epochs_no_improve = 0
+            else:
+                count_epochs_no_improve += 1
+                if count_epochs_no_improve == patience:
+                    print(f"Early stopping at epoch {epoch}")
+                    break
+            
+            print(f"Epoch {epoch}, train RMSE: {train_rmse}, val RMSE: {val_rmse}")
     return model
 
 if __name__ == "__main__":
     for ModelType in [RecurrentNNLSTM]:
-        for input_features in [['number_sold_scaled', 'day_of_year', 'store_0', 'store_1', 'store_2', 'store_3', 'store_4', 'store_5', 'store_6', 'product_0', 'product_1', 'product_2', 'product_3', 'product_4', 'product_5', 'product_6', 'product_7', 'product_8', 'product_9']]: 
-            model = train(ModelType, input_features=input_features)
-            torch.save(model.state_dict(), f'{model.__class__.__name__}_{len(input_features)}.pth')
+        model = train(ModelType, ['number_sold_scaled', 'product', 'store'])
+        torch.save(model.state_dict(), f'{model.__class__.__name__}_productandstore.pth')

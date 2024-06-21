@@ -24,7 +24,7 @@ import torch.nn as nn
 class RecurrentNN(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.rnn_unit = torch.nn.LSTM(input_size=1, hidden_size=10, num_layers=1)
+        self.rnn_unit = torch.nn.RNN(input_size=1, hidden_size=10, num_layers=1)
         self.output_unit = torch.nn.Linear(10, 5)
 
     def forward(self, x: torch.Tensor):
